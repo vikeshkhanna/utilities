@@ -14,7 +14,7 @@ except IndexError:
 		print "\n\n" + root + " does not exist. Using current working directory.\n";
 		root = os.getcwd();
 
-user_regex = str(raw_input("\n\nYou can specify you own python-style regular expression if you have anything apart from numbers leading every file name, \
+user_regex = str(raw_input("\n\nYou can specify your own python-style regular expression if you have anything apart from numbers leading every file name, \
 like, say, the artist name. Press enter if you don't understand this part: "));
 
 t = raw_input("\nWarning! " + utility_name + " will rename all files that meet the criteria recursively from " + root + ". 0 to quit, 1 to confirm: ");
