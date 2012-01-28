@@ -2,6 +2,14 @@ Janitor renames all files inside a root folder recursively if the file names beg
 
 Requirements - Python interpreter
 
-Usage: python janitor.py <root folder>
-       If root folder is missing, the current working directory is used
+Usage: 
 
+1. You don't have python interpretor:
+
+Download janitor.zip and run the exe :)
+
+2. You are awesome enough to have the python interpretor:
+
+python janitor.py <root folder>
+
+If root folder is missing, the program will ask you for the location. If the locaiton does not exist, Janitor will use current working directory
