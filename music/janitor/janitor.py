@@ -30,6 +30,9 @@ for dirpath, dirnames, filenames in os.walk(root):
 			#print re.sub('^(\d+\s*[.]?\s*[-_]?\s*)?\s*(' + user_regex + ')?\s*','', file);
 			new_name = re.sub('^(\d+\s*[.]?\s*[-_]?\s*)?\s*(' + user_regex + ')?\s*','', file);
 			print file + " > " + new_name
-			os.rename(os.path.join(dirpath, file), os.path.join(dirpath, new_name));
-
+			try:
+				os.rename(os.path.join(dirpath, file), os.path.join(dirpath, new_name));
+			except Exception as err:
+				print "Could not rename file : " + str(err)
+				
 raw_input('Press enter to quit...');
