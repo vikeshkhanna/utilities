@@ -1,0 +1,7 @@
+Janitor renames all files inside a root folder recursively if the file names begin with a number. Developed to rename files like "01. <songname>.mp3" to "<songname>.mp3". 
+
+Requirements - Python interpreter
+
+Usage: python janitor.py <root folder>
+       If root folder is missing, the current working directory is used
+
