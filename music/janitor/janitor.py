@@ -17,7 +17,7 @@ except IndexError:
 user_regex = str(raw_input("\n\nYou can specify you own python-style regular expression if you have anything apart from numbers leading every file name, \
 like, say, the artist name. Press enter if you don't understand this part: "));
 
-t = raw_input("Warning! " + utility_name + " will rename all files recursively from " + root + " beginning with numbers. 0 to quit, 1 to confirm: ");
+t = raw_input("\nWarning! " + utility_name + " will rename all files that meet the criteria recursively from " + root + ". 0 to quit, 1 to confirm: ");
 
 if int(t) == 0:
 	print "\nCool! Nothing happened!\n"
