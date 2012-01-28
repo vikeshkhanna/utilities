@@ -17,9 +17,14 @@ except IndexError:
 user_regex = str(raw_input("\n\nYou can specify your own python-style regular expression if you have anything apart from numbers leading every file name, \
 like, say, the artist name. Press enter if you don't understand this part: "));
 
-t = raw_input("\nWarning! " + utility_name + " will rename all files that meet the criteria recursively from " + root + ". 0 to quit, 1 to confirm: ");
+if user_regex != "":
+	message = "\nWarning! " + utility_name + " will rename all files that meet the criteria recursively from " + root + ". \n0 to Quit, 1 to Rename, 2 to Test Custom Regex: "
+else:
+	message = "\nWarning! " + utility_name + " will rename all files that meet the criteria recursively from " + root + ". \n0 to Quit, 1 to Rename: "
+	
+t = int(raw_input(message));
 
-if int(t) == 0:
+if t == 0:
 	print "\nCool! Nothing happened!\n"
 	sys.exit(0);
 else:
@@ -30,9 +35,11 @@ for dirpath, dirnames, filenames in os.walk(root):
 			#print re.sub('^(\d+\s*[.]?\s*[-_]?\s*)?\s*(' + user_regex + ')?\s*','', file);
 			new_name = re.sub('^(\d+\s*[.]?\s*[-_]?\s*)?\s*(' + user_regex + ')?\s*','', file);
 			print file + " > " + new_name
-			try:
-				os.rename(os.path.join(dirpath, file), os.path.join(dirpath, new_name));
-			except Exception as err:
-				print "Could not rename file : " + str(err)
-				
+			
+			if t!=2:
+				try:
+					os.rename(os.path.join(dirpath, file), os.path.join(dirpath, new_name));
+				except Exception as (errno, strerror):
+					print "Could not rename file : " + strerror + "(" + str(errno) +")"
+					
 raw_input('Press enter to quit...');

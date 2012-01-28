@@ -1,5 +1,4 @@
-Janitor renames all files inside a root folder recursively if the file names begin with a number. Developed to rename files like "01. <songname>.mp3" to "<songname>.mp3". 
-You can also add custom regex. The default behaviour will take care of leading numbers followed by dashes / dots / underscores. For anything else, add your custom regex.
+Janitor renames all files inside a root folder recursively if the file names begin with a certain regex. Developed to rename files like "01. <songname>.mp3" to "<songname>.mp3". You can also add custom regex. The default behaviour will take care of leading numbers followed by dashes / dots / underscores. For anything else, add your custom regex. You should check out the screenshots for examples of custom regex.
 
 Usage: 
 
