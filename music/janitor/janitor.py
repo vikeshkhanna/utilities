@@ -20,18 +20,22 @@ try:
 except IndexError:
 	root = str(raw_input("\nPlease enter the path of the root directory without trailing slash : "));
 	
-	if not os.path.exists(root):
-		print "\n\n" + root + " does not exist. Using current working directory.\n";
-		root = os.getcwd();
+if not os.path.exists(root):
+	print "\n\n" + root + " does not exist. Using current working directory.\n";
+	root = os.getcwd();
 
 print "\nWelcome to Janitor.\n"
+print "0: Quit"
 print "1: Remove leading numbers followed by dots / underscores / dashes"
 print "2: Remove all leading words upto and including a '-' or '_' "
 print "3: Remove anything inside and including the last set of curly braces, as in Heartbreaker (Led Zeppelin).mp3"
 print "4: Custom Regex (Recommended for experienced users only. This does not default to leading characters)" 
 
 opt = int(raw_input("\nWhat would you like to do?: "));
-if opt == 1:
+
+if opt == 0:
+	sys.exit(0)
+elif opt == 1:
 	regex = '^([(]?\d+[)]?\s*[.]?\s*[-_]?\s*)?\s*';
 elif opt == 2:
 	regex = '^(.)*\s*[-_]\s*';
@@ -89,10 +93,10 @@ while not final:
 								try:
 									new_file = os.path.join(dirpath, new_filename);
 									audio = EasyID3(os.path.join(dirpath, new_file));
-									old_title = str(audio["title"])
+									old_title = ' '.join(audio["title"])
 									audio["title"] = new_name;
 									audio.save()
-									print "[Title] " + old_title + " > " + str(audio["title"])
+									print "[Title] " + old_title + " > " + ' '.join(audio["title"])
 									
 								except Exception as err:
 									print "Could not rename audio title : " + str(err)
