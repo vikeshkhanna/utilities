@@ -1,3 +1,8 @@
+# Developed by Vikesh Khanna
+# Janitor is an open-source utility which comes as-is WITHOUT ANY WARRANTY. Janitor renames files on your drive - Use at your own risk.
+
+# TODO : Regex presets
+
 import os
 import sys
 import re
@@ -38,33 +43,36 @@ else:
 for dirpath, dirnames, filenames in os.walk(root):
 	for file in filenames:
 			#print re.sub('^(\d+\s*[.]?\s*[-_]?\s*)?\s*(' + user_regex + ')?\s*','', file);
-			old_filename = file[0: file.rindex('.')];
-			extension = file[file.rindex('.'):];
-			
-			new_name = re.sub('^([(]?\d+[)]?\s*[.]?\s*[-_]?\s*)?\s*(' + user_regex + ')?\s*','', old_filename);
-			new_filename = new_name + extension;
-			
-			print "[Filename] " + file + " > " + new_filename
-			
-			#test custom regex
-			if t != 3:
-				try:
-					os.rename(os.path.join(dirpath, file), os.path.join(dirpath, new_filename));
-					
-					#rename files and ID3
-					if t == 2:
-						try:
-							new_file = os.path.join(dirpath, new_filename);
-							audio = EasyID3(os.path.join(dirpath, new_file));
-							old_title = str(audio["title"])
-							audio["title"] = new_name;
-							audio.save()
-							print "[Title] " + old_title + " > " + str(audio["title"])
-							
-						except Exception as err:
-							print "Could not rename audio title : " + str(err)
-			
-				except Exception as (errno, strerror):
-					print "Could not rename file : " + strerror + "(" + str(errno) +")"
-					
+			try:
+				old_filename = file[0: file.rindex('.')];
+				extension = file[file.rindex('.'):];
+				
+				new_name = re.sub('^([(]?\d+[)]?\s*[.]?\s*[-_]?\s*)?\s*(' + user_regex + ')?\s*','', old_filename);
+				new_filename = new_name + extension;
+				
+				print "[Filename] " + file + " > " + new_filename
+				
+				#test custom regex
+				if t != 3:
+					try:
+						os.rename(os.path.join(dirpath, file), os.path.join(dirpath, new_filename));
+						
+						#rename files and ID3
+						if t == 2:
+							try:
+								new_file = os.path.join(dirpath, new_filename);
+								audio = EasyID3(os.path.join(dirpath, new_file));
+								old_title = str(audio["title"])
+								audio["title"] = new_name;
+								audio.save()
+								print "[Title] " + old_title + " > " + str(audio["title"])
+								
+							except Exception as err:
+								print "Could not rename audio title : " + str(err)
+				
+					except Exception as (errno, strerror):
+						print "Could not rename file : " + strerror + "(" + str(errno) +")"
+			except Exception as err:
+				print "Could not read file: " + str(err)
+				
 raw_input('Press enter to quit...');
