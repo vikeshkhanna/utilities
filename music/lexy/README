@@ -1,0 +1,8 @@
+Lexy is a utility (a female, and a very smart one at that) that fetches lyrics for all the songs under a given given directory recursively and adds them to the file's ID3 tags. 
+
+Technology used : Python, BeautifulSoup, mutagen
+
+Usage: 
+python lexy.py <folder>
+
+If the folder is not specified, Lexy will ask you for it.
