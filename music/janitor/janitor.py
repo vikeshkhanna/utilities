@@ -41,7 +41,7 @@ for dirpath, dirnames, filenames in os.walk(root):
 			old_filename = file[0: file.rindex('.')];
 			extension = file[file.rindex('.'):];
 			
-			new_name = re.sub('^(\d+\s*[.]?\s*[-_]?\s*)?\s*(' + user_regex + ')?\s*','', old_filename);
+			new_name = re.sub('^([(]?\d+[)]?\s*[.]?\s*[-_]?\s*)?\s*(' + user_regex + ')?\s*','', old_filename);
 			new_filename = new_name + extension;
 			
 			print "[Filename] " + file + " > " + new_filename
