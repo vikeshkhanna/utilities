@@ -1,0 +1,8 @@
+Graffiti is a light weight python utility that sets the cover art for all the music files under a given folder to the 
+supplied argument.
+
+Usage - python graffity.py "<folder>" "<cover art>"
+
+
+If cover art image is not found relative to the root folder, graffiti will try it as absolute path
+.
