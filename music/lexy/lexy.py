@@ -16,7 +16,7 @@ from mutagen import *
 import re, htmlentitydefs
 
 #max number of tries to get lyrics
-MAX_ATTEMPTS = 5
+MAX_ATTEMPTS = 6
 
 #Minimum legit lyrics will have at least MIN_LEN characters
 MIN_LEN  = 20
@@ -132,8 +132,13 @@ while not final:
 	
 	for dirpath, dirnames, filenames in os.walk(root):
 		for file in filenames:	
+			
+			#file properties
+			filename = file[0:file.rindex('.')]
+			extension = file[file.rindex('.') + 1:]
+			
 			fetch = False
-		
+			
 			try:
 				easy_audio = EasyID3(os.path.join(dirpath, file))
 				audio = ID3(os.path.join(dirpath, file));
@@ -180,7 +185,7 @@ while not final:
 					
 					if len(re.sub("\s*",'',title)) == 0:
 						print("[warning] Title not found in ID3 tags for " + file + ". Using file name.")
-						title = file[0:file.rindex('.')]
+						title = filename
 					
 					# Get artist
 					artist = ''
@@ -201,18 +206,23 @@ while not final:
 						if len(re.sub("\s*",'',artist))==0:
 							print "[Warning] Artist name was not found for " + title + ". Lyrics may be wrong."
 					
+					artist_store = artist
+					
 					attempts = 0
-
+					
+					current_request = artist + ' ' + title
+					new_request = current_request
+					
+					print("\nFetching lyrics for " + current_request + ". Please wait.")
+					lyrics = get_lyrics(current_request)
+					
+					#Fault tolerance 
 					while attempts < MAX_ATTEMPTS:
-						print "\nFetching lyrics for " + artist + ' ' + title + ". Please wait."
-						#lyrics = "ada";
-						lyrics = get_lyrics(artist + ' ' + title)
-						
 						if lyrics and len(lyrics)>0:
 							print "\n" + title + " : \n" + lyrics[:len(lyrics)/5] + "...(continued) "
 							break
 						else:
-							message = "[Attempt " + str(attempts) + "] Lyrics not found. "
+							message = "[retry unsuccessful] Lyrics not found. "
 							
 							if attempts == 0:
 								message +=  "Cleaning leading numbers in title and retrying"
@@ -226,7 +236,22 @@ while not final:
 							elif attempts == 3:
 								message += "Cleaning trailing braced words and retrying"
 								title = re.sub("\s*\((.\s*)*\)\s*$", '', title)
+							elif attempts == 4:
+								message += "Using file name instead of ID3 tag as title"
+								title = filename
+								#must try all over again with this new approach, restoring artist name
+								attempt = -1
+								artist = artist_store
 							print message
+							
+						new_request = artist + ' ' + title
+
+						# dont waste bandwidth on false guesses
+						if new_request != current_request:
+								current_request = new_request
+								print("[retry] Fetching lyrics for " + current_request + ". Please wait.")
+								lyrics = get_lyrics(current_request)
+								
 						attempts += 1
 						
 					try:
