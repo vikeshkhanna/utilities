@@ -1,4 +1,4 @@
-Lexy is a utility (a female, and a very smart one at that) that fetches lyrics for all the songs under a given given directory recursively and adds them to the file's ID3 tags. 
+Lexy is a utility (a female, and a very smart one at that) that fetches lyrics for all the songs under a given given directory recursively and adds them to the file's ID3 tags. Lexy uses the songs' title and artist to fetch the lyrics. If you have these tags also messed up, Lexy will try to clean the title of track numbers and dashes / underscores and retry but beyond that you need something more powerful - like an audio fingerprinting software.
 
 Technology used : Python, BeautifulSoup, mutagen
 
