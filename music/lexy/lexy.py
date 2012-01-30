@@ -16,7 +16,7 @@ from mutagen import *
 import re, htmlentitydefs
 
 #max number of tries to get lyrics
-MAX_ATTEMPTS = 4
+MAX_ATTEMPTS = 5
 
 #Minimum legit lyrics will have at least MIN_LEN characters
 MIN_LEN  = 20
@@ -133,14 +133,10 @@ while not final:
 	for dirpath, dirnames, filenames in os.walk(root):
 		for file in filenames:	
 			fetch = False
-			
+		
 			try:
 				easy_audio = EasyID3(os.path.join(dirpath, file))
 				audio = ID3(os.path.join(dirpath, file));
-				
-				#okay to throw exception if no title is found
-				title = ' '.join(easy_audio["title"])
-				artist = ''
 				
 				#fetch missing songs only or show missing lyrics
 				if opt == 1 or opt == 2:
@@ -164,24 +160,51 @@ while not final:
 							fetch = True
 						#show missing song
 						elif opt == 1:
-							print "\n[Missing Lyrics] " + os.path.join(dirpath, file)
+							print "\n[Missing Lyrics] " + file
 							
 				#fetch all songs
 				elif opt == 3:
 					fetch = True
 				
 				if fetch:
+					# Get title
+					title = ''
+				
+					try:
+						title = ' '.join(easy_audio["title"])
+					except Exception as err:
+						print("[warning] Couldn't read easyID3 for " + file + " " + str(err))
+						
+						for entry in audio.getall("TIT2"):
+							title += ' '.join(entry.text)
+					
+					if len(re.sub("\s*",'',title)) == 0:
+						print("[warning] Title not found in ID3 tags for " + file + ". Using file name.")
+						title = file[0:file.rindex('.')]
+					
+					# Get artist
+					artist = ''
+					
 					try: 
 						artist = ' '.join(easy_audio["artist"])
 					except KeyError:
-						print "\n[Warning] Artist name was not found for " + title + ". Lyrics may be wrong."
+						print("[warning] Couldn't read artist from easyID3 for " + file + " " + str(err))
 					
-					easy_audio.save()
+						# Testing lead artist 
+						for entry in audio.getall("TPE1"):
+							artist += ' '.join(entry.text)
+						
+						# Testing band / orchestra
+						for entry in audio.getall("TPE2"):
+							artist += ' '.join(entry.text)
+						
+						if len(re.sub("\s*",'',artist))==0:
+							print "[Warning] Artist name was not found for " + title + ". Lyrics may be wrong."
 					
 					attempts = 0
 
 					while attempts < MAX_ATTEMPTS:
-						print "\nFetching lyrics for " + title + ' ' + artist + ". Please wait."
+						print "\nFetching lyrics for " + artist + ' ' + title + ". Please wait."
 						#lyrics = "ada";
 						lyrics = get_lyrics(artist + ' ' + title)
 						
@@ -189,7 +212,7 @@ while not final:
 							print "\n" + title + " : \n" + lyrics[:len(lyrics)/5] + "...(continued) "
 							break
 						else:
-							message = "\n[Attempt " + str(attempts) + "] Lyrics not found. "
+							message = "[Attempt " + str(attempts) + "] Lyrics not found. "
 							
 							if attempts == 0:
 								message +=  "Cleaning leading numbers in title and retrying"
@@ -208,6 +231,7 @@ while not final:
 						
 					try:
 						if lyrics and len(lyrics)>0 and final:
+							audio.delall("USLT")
 							audio[u"USLT::'eng'"] = id3.USLT()
 							audio[u"USLT::'eng'"].text = lyrics
 							audio[u"USLT::'eng'"].encoding = 0
@@ -215,7 +239,7 @@ while not final:
 							audio[u"USLT::'eng'"].desc = u''
 							
 							audio.save()
-							print "Successfully added lyrics for " + title
+							print "********Successfully added lyrics for " + title + "*************"
 							
 					except Exception as err:
 							print "\n[error] Could not add lyrics: " + str(err)
@@ -223,4 +247,4 @@ while not final:
 			except Exception as err:	
 				print "\n[error] " + str(err)
 			
-raw_input("Press enter to quit")	
+raw_input("Press enter to quit...")	
