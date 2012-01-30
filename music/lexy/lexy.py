@@ -18,6 +18,9 @@ import re, htmlentitydefs
 #max number of tries to get lyrics
 MAX_ATTEMPTS = 4
 
+#Minimum legit lyrics will have at least MIN_LEN characters
+MIN_LEN  = 20
+
 ## Thanks to Fredrik Lundh - http://effbot.org/zone/re-sub.htm#unescape-html
 # Removes HTML or XML character references and entities from a text string.
 #
@@ -90,49 +93,80 @@ if not os.path.exists(root):
 
 print "\nWelcome to Lexy.\n"
 
-print "0: Quit (already?)"
-print "1: Fetch missing lyrics only"
-print "2: Fetch lyrics for all songs"
+def get_input():
+	print "0: Quit (already?)"
+	print "1: Show which songs have missing lyrics"
+	print "2: Fetch missing lyrics only"
+	print "3: Fetch lyrics for all songs"
 
-opt = int(raw_input("\nWhat would you like to do?: "));
+	opt = int(raw_input("\nWhat would you like to do?: "));
 
-if opt == 0:
-	print "\nBye!"
-	sys.exit(0)
+	return opt
 	
 final = False
+recount = 0
 
 while not final:
-	print "\nWarning! Lexy will change the 'lyrics' ID3 tag of all songs recursively under " + root + " if you choose to add lyrics.\n\
-0: Quit\n1: Add lyrics to songs\n2: Show fetched lyrics (Test Lexy before modifying songs)"
 	
-	t = int(raw_input("\nWhat would you like to do?: "));
+	#get user input
+	opt = get_input()
 	
-	if t == 0:
+	if opt == 0:
 		print "\nBye!"
-		sys.exit(0);
-	elif t == 1:
-		final = True
+		sys.exit(0)
+	
+	#No secondary options needed for showing songs with missing lyrics
+	if opt != 1:
+		print "\nWarning! Lexy will change the 'lyrics' ID3 tag of all songs recursively under " + root + " if you choose to add lyrics.\n\
+0: Quit\n1: Add lyrics to songs\n2: Show fetched lyrics (Test Lexy before modifying songs)"
 		
+		t = int(raw_input("\nWhat would you like to do?: "));
+		
+		if t == 0: # quit
+			print "\nBye!"
+			sys.exit(0);
+		elif t == 1: #add lyrics is the final stage
+			final = True
+	
 	for dirpath, dirnames, filenames in os.walk(root):
 		for file in filenames:	
 			fetch = False
 			
 			try:
 				easy_audio = EasyID3(os.path.join(dirpath, file))
-				
-				#fetch missing songs only
-				if opt == 1:
-					if "lyrics" in	audio:
-							if len(audio["lyrics"]) > 0:
-								fetch = True
-				#fetch all songs
-				elif opt == 2:
-					fetch = True
+				audio = ID3(os.path.join(dirpath, file));
 				
 				#okay to throw exception if no title is found
 				title = ' '.join(easy_audio["title"])
 				artist = ''
+				
+				#fetch missing songs only or show missing lyrics
+				if opt == 1 or opt == 2:
+					missing = False
+					
+					if len(audio.getall("USLT")) == 0:
+							missing = True
+					else:
+						full_text = ""
+
+						for uslt in audio.getall("USLT"):
+							if uslt.desc != u"None":
+								full_text +=  uslt.text
+							
+						if len(full_text) < MIN_LEN:
+							missing = True
+							
+					if missing:
+						#fetch missing song
+						if opt == 2:
+							fetch = True
+						#show missing song
+						elif opt == 1:
+							print "\n[Missing Lyrics] " + os.path.join(dirpath, file)
+							
+				#fetch all songs
+				elif opt == 3:
+					fetch = True
 				
 				if fetch:
 					try: 
@@ -171,13 +205,13 @@ while not final:
 						attempts += 1
 						
 					try:
-						audio = ID3(os.path.join(dirpath, file));
-				
 						if lyrics and len(lyrics)>0 and final:
 							audio[u"USLT::'eng'"] = id3.USLT()
 							audio[u"USLT::'eng'"].text = lyrics
 							audio[u"USLT::'eng'"].encoding = 0
 							audio[u"USLT::'eng'"].lang = 'eng'
+							audio[u"USLT::'eng'"].desc = u''
+							
 							audio.save()
 							print "Successfully added lyrics for " + title
 							
