@@ -221,4 +221,4 @@ while not final:
 			except Exception as err:	
 				print "\n[error] " + str(err)
 			
-	
+raw_input("Press enter to quit")	
