@@ -85,6 +85,8 @@ try:
 	root = sys.argv[1];
 except IndexError:
 	root = str(raw_input("\nPlease enter the path of the root directory without trailing slash : "));
+
+root = re.sub("/|\$",'', root)
 	
 if not os.path.exists(root):
 	print "\n\n" + root + " does not exist. Using current working directory.\n";
