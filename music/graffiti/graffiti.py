@@ -74,7 +74,7 @@ for file in os.listdir(root):
 		audio = ID3(os.path.join(root, file))
 		audio.delall("APIC")
 		audio["APIC"] = APIC(encoding=3, mime="image/" + extension, type = 3, desc = u"Cover", data = open(art,"rb").read())
-		audio.save()
+		audio.save(v2=3)
 		print("Successfully added artwork for " + file)
 	except Exception as err:
 		print("[error] " + str(err))

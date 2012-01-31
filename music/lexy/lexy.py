@@ -134,12 +134,12 @@ while not final:
 		for file in filenames:	
 			
 			#file properties
-			filename = file[0:file.rindex('.')]
-			extension = file[file.rindex('.') + 1:]
-			
-			fetch = False
-			
 			try:
+				filename = file[0:file.rindex('.')]
+				extension = file[file.rindex('.') + 1:]
+			
+				fetch = False
+			
 				easy_audio = EasyID3(os.path.join(dirpath, file))
 				audio = ID3(os.path.join(dirpath, file));
 				
@@ -263,7 +263,7 @@ while not final:
 							audio[u"USLT::'eng'"].lang = 'eng'
 							audio[u"USLT::'eng'"].desc = u''
 							
-							audio.save()
+							audio.save(v2=3)
 							print "********Successfully added lyrics for " + title + "*************"
 							
 					except Exception as err:

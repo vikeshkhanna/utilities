@@ -1,0 +1,282 @@
+Index: mutagen/id3.py
+===================================================================
+--- mutagen/id3.py	(revision 102)
++++ mutagen/id3.py	(working copy)
+@@ -345,7 +345,7 @@
+ 
+     #f_crc = property(lambda s: bool(s.__extflags & 0x8000))
+ 
+-    def save(self, filename=None, v1=1):
++    def save(self, filename=None, v1=1, v2=4):
+         """Save changes to a file.
+ 
+         If no filename is given, the one most recently loaded is used.
+@@ -354,6 +354,9 @@
+         v1 -- if 0, ID3v1 tags will be removed
+               if 1, ID3v1 tags will be updated but not added
+               if 2, ID3v1 tags will be created and/or updated
++        v2 -- version of ID3v2 tags (3 or 4). By default Mutagen saves ID3v2.4
++              tags. If you want to save ID3v2.3 tags, you must call method
++              update_to_v23 before saving the file.
+ 
+         The lack of a way to update only an ID3v1 tag is intentional.
+         """
+@@ -366,7 +369,7 @@
+         frames.sort(lambda a, b: cmp(order.get(a[0][:4], last),
+                                      order.get(b[0][:4], last)))
+ 
+-        framedata = [self.__save_frame(frame) for (key, frame) in frames]
++        framedata = [self.__save_frame(frame, v2) for (key, frame) in frames]
+         framedata.extend([data for data in self.unknown_frames
+                 if len(data) > 10])
+         if not framedata:
+@@ -400,7 +403,7 @@
+ 
+             framesize = BitPaddedInt.to_str(outsize, width=4)
+             flags = 0
+-            header = pack('>3sBBB4s', 'ID3', 4, 0, flags, framesize)
++            header = pack('>3sBBB4s', 'ID3', v2, 0, flags, framesize)
+             data = header + framedata
+ 
+             if (insize < outsize):
+@@ -453,23 +456,80 @@
+         delete(filename, delete_v1, delete_v2)
+         self.clear()
+ 
+-    def __save_frame(self, frame):
++    def __save_frame(self, frame, v2=4):
+         flags = 0
+         if self.PEDANTIC and isinstance(frame, TextFrame):
+             if len(str(frame)) == 0: return ''
+         framedata = frame._writeData()
+-        usize = len(framedata)
+-        if usize > 2048:
+-            # Disabled as this causes iTunes and other programs
+-            # to fail to find these frames, which usually includes
+-            # e.g. APIC.
+-            #framedata = BitPaddedInt.to_str(usize) + framedata.encode('zlib')
+-            #flags |= Frame.FLAG24_COMPRESS | Frame.FLAG24_DATALEN
+-            pass
+-        datasize = BitPaddedInt.to_str(len(framedata), width=4)
++        if v2 == 3: bits=8
++        else: bits=7
++        datasize = BitPaddedInt.to_str(len(framedata), width=4, bits=bits)
+         header = pack('>4s4sH', type(frame).__name__, datasize, flags)
+         return header + framedata
+ 
++    def update_to_v23(self):
++        """Convert older (and newer) tags into an ID3v2.3 tag.
++
++        This updates incompatible ID3v2 frames to ID3v2.3 ones. If you
++        intend to save tags as ID3v2.3, you must call this function
++        at some point.
++        """
++
++        self._update_common()
++
++        # TMCL, TIPL -> TIPL
++        if "TIPL" in self or "TMCL" in self:
++            people = []
++            if "TIPL" in self:
++                f = self.pop("TIPL")
++                people.extend(f.people)
++            if "TMCL" in self:
++                f = self.pop("TMCL")
++                people.extend(f.people)
++            if "IPLS" not in self:
++                self.add(IPLS(encoding=f.encoding, people=people))
++
++        # TODO:
++        #  * EQU2 -> EQUA
++        #  * RVA2 -> RVAD 
++
++        #  TDOR -> TORY
++        if "TDOR" in self:
++            f = self.pop("TDOR")
++            if f.text:
++                d = f.text[0]
++                if d.year and "TORY" not in self:
++                    self.add(TORY(encoding=f.encoding, text="%04d" % d.year))
++
++        # TDRC -> TYER, TDAT, TIME
++        if "TDRC" in self:
++            f = self.pop("TDRC")
++            if f.text:
++                d = f.text[0]
++                if d.year and "TYER" not in self:
++                    self.add(TYER(encoding=f.encoding, text="%04d" % d.year))
++                if d.month and d.day and "TDAT" not in self:
++                    self.add(TDAT(encoding=f.encoding, text="%02d%02d" % (d.day, d.month)))
++                if d.hour and d.minute and "TIME" not in self:
++                    self.add(TIME(encoding=f.encoding, text="%02d%02d" % (d.hour, d.minute)))
++
++        # New frames added in v2.4.
++        for key in ["ASPI", "EQU2", "RVA2", "SEEK", "SIGN", "TDRL", "TDTG",
++            "TMOO", "TPRO", "TSOA", "TSOT", "TSOP", "TSST"]:
++            if key in self: del(self[key])
++
++        for frame in self.values():
++            # ID3v2.3 only support ISO-8859-1 and UTF-16
++            if hasattr(frame, "encoding"):
++                if frame.encoding > 1:
++                    frame.encoding = 1
++            # ID3v2.3 doesn't support multiple values
++            if isinstance(frame, mutagen.id3.TextFrame):
++                try:
++                    frame.text = ["/".join(frame.text)]
++                except TypeError:
++                    frame.text = frame.text[:1]
++
+     def update_to_v24(self):
+         """Convert older tags into an ID3v2.4 tag.
+ 
+@@ -478,8 +538,7 @@
+         at some point; it is called by default when loading the tag.
+         """
+ 
+-        if self.version < (2,3,0): del self.unknown_frames[:]
+-        # unsafe to write
++        self._update_common()
+ 
+         # TDAT, TYER, and TIME have been turned into TDRC.
+         try:
+@@ -513,10 +572,15 @@
+             if "TIPL" not in self:
+                 self.add(TIPL(encoding=f.encoding, people=f.people))
+ 
+-        if "TCON" in self:
+-            # Get rid of "(xx)Foobr" format.
+-            self["TCON"].genres = self["TCON"].genres
++        # These can't be trivially translated to any ID3v2.4 tags, or
++        # should have been removed already.
++        for key in ["RVAD", "EQUA", "TRDA", "TSIZ", "TDAT", "TIME", "CRM"]:
++            if key in self: del(self[key])
+ 
++    def _update_common(self):
++        if self.version < (2,3,0): del self.unknown_frames[:]
++        # unsafe to write
++
+         if self.version < (2, 3):
+             # ID3v2.2 PIC frames are slightly different.
+             pics = self.getall("APIC")
+@@ -531,10 +595,9 @@
+             # ID3v2.2 LNK frames are just way too different to upgrade.
+             self.delall("LINK")
+ 
+-        # These can't be trivially translated to any ID3v2.4 tags, or
+-        # should have been removed already.
+-        for key in ["RVAD", "EQUA", "TRDA", "TSIZ", "TDAT", "TIME", "CRM"]:
+-            if key in self: del(self[key])
++        if "TCON" in self:
++            # Get rid of "(xx)Foobr" format.
++            self["TCON"].genres = self["TCON"].genres
+ 
+ def delete(filename, delete_v1=True, delete_v2=True):
+     """Remove tags from a file.
+Index: tests/test_id3.py
+===================================================================
+--- tests/test_id3.py	(revision 102)
++++ tests/test_id3.py	(working copy)
+@@ -2,6 +2,7 @@
+ import shutil
+ from unittest import TestCase
+ from tests import add
++from mutagen import id3
+ from mutagen.id3 import ID3, BitPaddedInt, COMR, Frames, Frames_2_2, ID3Warning, ID3JunkFrameError
+ from StringIO import StringIO
+ import warnings
+@@ -1473,6 +1474,16 @@
+         self.assertEquals(id3["TIT2"], "Silence")
+         self.assertEquals(id3["TPE1"], ["jzig"])
+ 
++    def test_same_v23(self):
++        id3 = ID3(self.newsilence)
++        id3.update_to_v23()
++        id3.save(v2=3)
++        id3 = ID3(self.newsilence)
++        self.assertEquals(id3["TALB"], "Quod Libet Test Data")
++        self.assertEquals(id3["TCON"], "Silence")
++        self.assertEquals(id3["TIT2"], "Silence")
++        self.assertEquals(id3["TPE1"], "jzig")
++
+     def test_addframe(self):
+         from mutagen.id3 import TIT3
+         f = ID3(self.newsilence)
+@@ -1736,6 +1747,69 @@
+         tag = ParseID3v1(s)
+         self.failUnlessEqual(tag["TDRC"], "1234")
+ 
++class UpdateTo23(TestCase):
++
++    def test_multiple_text_values(self):
++        tags = ID3()
++        tags.add(id3.TALB(encoding=0, text=["123","abc"]))
++        tags.update_to_v23()
++        self.failUnlessEqual(tags["TALB"].text, ["123/abc"])
++
++    def test_encoding(self):
++        tags = ID3()
++        tags.add(id3.TALB(encoding=2, text="abc"))
++        tags.add(id3.TIT2(encoding=3, text="abc"))
++        tags.update_to_v23()
++        self.failUnlessEqual(tags["TALB"].encoding, 1)
++        self.failUnlessEqual(tags["TIT2"].encoding, 1)
++
++    def test_tdrc(self):
++        tags = ID3()
++        tags.add(id3.TDRC(encoding=1, text="2003-04-05 12:03"))
++        tags.update_to_v23()
++        self.failUnlessEqual(tags["TYER"].text, ["2003"])
++        self.failUnlessEqual(tags["TDAT"].text, ["0504"])
++        self.failUnlessEqual(tags["TIME"].text, ["1203"])
++
++    def test_tdor(self):
++        tags = ID3()
++        tags.add(id3.TDOR(encoding=1, text="2003-04-05 12:03"))
++        tags.update_to_v23()
++        self.failUnlessEqual(tags["TORY"].text, ["2003"])
++
++    def test_genre_from_v24_1(self):
++        tags = ID3()
++        tags.add(id3.TCON(encoding=1, text=["4","Rock"]))
++        tags.update_to_v23()
++        self.failUnlessEqual(tags["TCON"].text, ["Disco/Rock"])
++
++    def test_genre_from_v24_2(self):
++        tags = ID3()
++        tags.add(id3.TCON(encoding=1, text=["RX", "3", "CR"]))
++        tags.update_to_v23()
++        self.failUnlessEqual(tags["TCON"].text, ["Remix/Dance/Cover"])
++
++    def test_genre_from_v23_1(self):
++        tags = ID3()
++        tags.add(id3.TCON(encoding=1, text=["(4)Rock"]))
++        tags.update_to_v23()
++        self.failUnlessEqual(tags["TCON"].text, ["Disco/Rock"])
++
++    def test_genre_from_v23_2(self):
++        tags = ID3()
++        tags.add(id3.TCON(encoding=1, text=["(RX)(3)(CR)"]))
++        tags.update_to_v23()
++        self.failUnlessEqual(tags["TCON"].text, ["Remix/Dance/Cover"])
++
++    def test_ipls(self):
++        tags = ID3()
++        tags.version = (2, 3)
++        tags.add(id3.TIPL(encoding=0, people=[["a", "b"], ["c", "d"]]))
++        tags.add(id3.TMCL(encoding=0, people=[["e", "f"], ["g", "h"]]))
++        tags.update_to_v23()
++        self.failUnlessEqual(tags["IPLS"], [["a", "b"], ["c", "d"],
++                                            ["e", "f"], ["g", "h"]])
++
+ add(ID3Loading)
+ add(ID3GetSetDel)
+ add(BitPaddedIntTest)
+@@ -1755,6 +1829,7 @@
+ add(BadPOPM)
+ add(TimeStampTextFrame)
+ add(Issue69_BadV1Year)
++add(UpdateTo23)
+ 
+ try: import eyeD3
+ except ImportError: pass

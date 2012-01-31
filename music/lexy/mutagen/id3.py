@@ -70,8 +70,8 @@ class ID3(DictProxy, mutagen.Metadata):
     __crc = None
 
     def __init__(self, *args, **kwargs):
-        self.unknown_frames = []
-        super(ID3, self).__init__(*args, **kwargs)
+		self.unknown_frames = []
+		super(ID3, self).__init__(*args, **kwargs)
 
     def __fullread(self, size):
         try:
@@ -341,7 +341,7 @@ class ID3(DictProxy, mutagen.Metadata):
 
     #f_crc = property(lambda s: bool(s.__extflags & 0x8000))
 
-    def save(self, filename=None, v1=1):
+    def save(self, filename=None, v1=1, v2=4):
         """Save changes to a file.
 
         If no filename is given, the one most recently loaded is used.
@@ -350,6 +350,9 @@ class ID3(DictProxy, mutagen.Metadata):
         v1 -- if 0, ID3v1 tags will be removed
               if 1, ID3v1 tags will be updated but not added
               if 2, ID3v1 tags will be created and/or updated
+        v2 -- version of ID3v2 tags (3 or 4). By default Mutagen saves ID3v2.4
+              tags. If you want to save ID3v2.3 tags, you must call method
+              update_to_v23 before saving the file.
 
         The lack of a way to update only an ID3v1 tag is intentional.
         """
@@ -362,7 +365,7 @@ class ID3(DictProxy, mutagen.Metadata):
         frames.sort(lambda a, b: cmp(order.get(a[0][:4], last),
                                      order.get(b[0][:4], last)))
 
-        framedata = [self.__save_frame(frame) for (key, frame) in frames]
+        framedata = [self.__save_frame(frame, v2) for (key, frame) in frames]
         framedata.extend([data for data in self.unknown_frames
                 if len(data) > 10])
         if not framedata:
@@ -396,7 +399,7 @@ class ID3(DictProxy, mutagen.Metadata):
 
             framesize = BitPaddedInt.to_str(outsize, width=4)
             flags = 0
-            header = pack('>3sBBB4s', 'ID3', 4, 0, flags, framesize)
+            header = pack('>3sBBB4s', 'ID3', v2, 0, flags, framesize)
             data = header + framedata
 
             if (insize < outsize):
@@ -436,22 +439,79 @@ class ID3(DictProxy, mutagen.Metadata):
         delete(filename, delete_v1, delete_v2)
         self.clear()
 
-    def __save_frame(self, frame):
+    def __save_frame(self, frame, v2=4):
         flags = 0
         if self.PEDANTIC and isinstance(frame, TextFrame):
             if len(str(frame)) == 0: return ''
         framedata = frame._writeData()
-        usize = len(framedata)
-        if usize > 2048:
-            # Disabled as this causes iTunes and other programs
-            # to fail to find these frames, which usually includes
-            # e.g. APIC.
-            #framedata = BitPaddedInt.to_str(usize) + framedata.encode('zlib')
-            #flags |= Frame.FLAG24_COMPRESS | Frame.FLAG24_DATALEN
-            pass
-        datasize = BitPaddedInt.to_str(len(framedata), width=4)
+        if v2 == 3: bits=8
+        else: bits=7
+        datasize = BitPaddedInt.to_str(len(framedata), width=4, bits=bits)
         header = pack('>4s4sH', type(frame).__name__, datasize, flags)
         return header + framedata
+	
+    def update_to_v23(self):
+        """Convert older (and newer) tags into an ID3v2.3 tag.
+
+        This updates incompatible ID3v2 frames to ID3v2.3 ones. If you
+        intend to save tags as ID3v2.3, you must call this function
+        at some point.
+        """
+
+        self._update_common()
+
+        # TMCL, TIPL -> TIPL
+        if "TIPL" in self or "TMCL" in self:
+            people = []
+            if "TIPL" in self:
+                f = self.pop("TIPL")
+                people.extend(f.people)
+            if "TMCL" in self:
+                f = self.pop("TMCL")
+                people.extend(f.people)
+            if "IPLS" not in self:
+                self.add(IPLS(encoding=f.encoding, people=people))
+
+        # TODO:
+        #  * EQU2 -> EQUA
+        #  * RVA2 -> RVAD 
+
+        #  TDOR -> TORY
+        if "TDOR" in self:
+            f = self.pop("TDOR")
+            if f.text:
+                d = f.text[0]
+                if d.year and "TORY" not in self:
+                    self.add(TORY(encoding=f.encoding, text="%04d" % d.year))
+
+        # TDRC -> TYER, TDAT, TIME
+        if "TDRC" in self:
+            f = self.pop("TDRC")
+            if f.text:
+                d = f.text[0]
+                if d.year and "TYER" not in self:
+                    self.add(TYER(encoding=f.encoding, text="%04d" % d.year))
+                if d.month and d.day and "TDAT" not in self:
+                    self.add(TDAT(encoding=f.encoding, text="%02d%02d" % (d.day, d.month)))
+                if d.hour and d.minute and "TIME" not in self:
+                    self.add(TIME(encoding=f.encoding, text="%02d%02d" % (d.hour, d.minute)))
+
+        # New frames added in v2.4.
+        for key in ["ASPI", "EQU2", "RVA2", "SEEK", "SIGN", "TDRL", "TDTG",
+            "TMOO", "TPRO", "TSOA", "TSOT", "TSOP", "TSST"]:
+            if key in self: del(self[key])
+
+        for frame in self.values():
+            # ID3v2.3 only support ISO-8859-1 and UTF-16
+            if hasattr(frame, "encoding"):
+                if frame.encoding > 1:
+                    frame.encoding = 1
+            # ID3v2.3 doesn't support multiple values
+            if isinstance(frame, mutagen.id3.TextFrame):
+                try:
+                    frame.text = ["/".join(frame.text)]
+                except TypeError:
+                    frame.text = frame.text[:1]
 
     def update_to_v24(self):
         """Convert older tags into an ID3v2.4 tag.
@@ -461,8 +521,7 @@ class ID3(DictProxy, mutagen.Metadata):
         at some point; it is called by default when loading the tag.
         """
 
-        if self.version < (2,3,0): del self.unknown_frames[:]
-        # unsafe to write
+        self._update_common()
 
         # TDAT, TYER, and TIME have been turned into TDRC.
         try:
@@ -496,9 +555,14 @@ class ID3(DictProxy, mutagen.Metadata):
             if "TIPL" not in self:
                 self.add(TIPL(encoding=f.encoding, people=f.people))
 
-        if "TCON" in self:
-            # Get rid of "(xx)Foobr" format.
-            self["TCON"].genres = self["TCON"].genres
+        # These can't be trivially translated to any ID3v2.4 tags, or
+        # should have been removed already.
+        for key in ["RVAD", "EQUA", "TRDA", "TSIZ", "TDAT", "TIME", "CRM"]:
+            if key in self: del(self[key])
+
+    def _update_common(self):
+        if self.version < (2,3,0): del self.unknown_frames[:]
+        # unsafe to write
 
         if self.version < (2, 3):
             # ID3v2.2 PIC frames are slightly different.
@@ -514,10 +578,9 @@ class ID3(DictProxy, mutagen.Metadata):
             # ID3v2.2 LNK frames are just way too different to upgrade.
             self.delall("LINK")
 
-        # These can't be trivially translated to any ID3v2.4 tags, or
-        # should have been removed already.
-        for key in ["RVAD", "EQUA", "TRDA", "TSIZ", "TDAT", "TIME", "CRM"]:
-            if key in self: del(self[key])
+        if "TCON" in self:
+            # Get rid of "(xx)Foobr" format.
+            self["TCON"].genres = self["TCON"].genres
 
 def delete(filename, delete_v1=True, delete_v2=True):
     """Remove tags from a file.
