@@ -26,7 +26,6 @@ MIN_LEN  = 20
 #
 # @param text The HTML (or XML) source text.
 # @return The plain text, as a Unicode string, if necessary.
-
 def unescape(text):
     def fixup(m):
         text = m.group(0)
@@ -48,6 +47,7 @@ def unescape(text):
         return text # leave as is
     return re.sub("&#?\w+;", fixup, text)
 
+#Extract lyrics from plain html
 def extract_lyrics(html):
 	soup = BeautifulSoup(html)
 	text = str(soup.find('div', {"class" : "lyricbox"}));
@@ -69,7 +69,8 @@ def extract_lyrics(html):
 		return text
 	else:
 		return None
-	
+
+#Scrape web for lyrics from lyrics.wikia.com
 def get_lyrics(title):
 	params = urllib.urlencode({'sourceid': 'navclient', 'btnI': 1, 'q': 'site:lyrics.wikia.com ' + title})
 	url = "http://google.com/search?%s" % params;
@@ -79,7 +80,120 @@ def get_lyrics(title):
 	response = urllib2.urlopen(req)
 	return extract_lyrics(response.read())
 
-#print get_lyrics("Wherever I may Roam");
+#Fault tolerant fetch lyrics
+def fetch_lyrics(artist, title, filename):
+	artist_store = artist
+	attempts = 0
+	current_request = artist + ' ' + title
+	new_request = current_request
+	
+	print("\nFetching lyrics for " + current_request + ". Please wait.")
+	lyrics = get_lyrics(current_request)
+	
+	#Fault tolerance 
+	while attempts < MAX_ATTEMPTS:
+		if lyrics and len(lyrics)>0:
+			print "\n" + title + " : \n" + lyrics[:len(lyrics)/5] + "...(continued) "
+			break
+		else:
+			message = "[retry unsuccessful] Lyrics not found. "
+			
+			if attempts == 0:
+				message +=  "Cleaning leading numbers in title and retrying"
+				title = re.sub("^([(]?\d+[)]?\s*[.]?\s*[-_]?\s*)?\s*","", title)
+			elif attempts == 1:
+				message += "Trying without artist name"
+				artist = ''
+			elif attempts == 2:
+				message += "Cleaning all numbers from the title and retrying"
+				title = re.sub("\d+",'',title)
+			elif attempts == 3:
+				message += "Cleaning trailing braced words and retrying"
+				title = re.sub("\s*\((.\s*)*\)\s*$", '', title)
+			elif attempts == 4:
+				message += "Using file name instead of ID3 tag as title"
+				title = filename
+				#must try all over again with this new approach, restoring artist name
+				attempt = -1
+				artist = artist_store
+			print message
+			
+		new_request = artist + ' ' + title
+
+		# dont waste bandwidth on false guesses
+		if new_request != current_request:
+				current_request = new_request
+				print("[retry] Fetching lyrics for " + current_request + ". Please wait.")
+				lyrics = get_lyrics(current_request)
+				
+		attempts += 1
+	
+	return lyrics
+	
+#Check if an audio object has missing lyrics
+def missing_lyrics(audio):
+	if len(audio.getall("USLT")) == 0:
+			return True
+	else:
+		full_text = ""
+
+		for uslt in audio.getall("USLT"):
+			if uslt.desc != u"None":
+				full_text +=  uslt.text
+			
+		if len(full_text) < MIN_LEN:
+			return True	
+
+#Get title
+def get_title(easy_audio, audio, file):
+	filename = filename = file[0:file.rindex('.')]
+				
+	try:
+		title = ' '.join(easy_audio["title"])
+	except Exception as err:
+		print("[warning] Couldn't read easyID3 for " + file + " " + str(err))
+		
+		for entry in audio.getall("TIT2"):
+			title += ' '.join(entry.text)
+	
+	if len(re.sub("\s*",'',title)) == 0:
+		print("[warning] Title not found in ID3 tags for " + file + ". Using file name.")
+		title = filename
+
+	return title
+
+#Get artist
+def get_artist(easy_audio, audio, file):
+	artist = ''
+	
+	try: 
+		artist = ' '.join(easy_audio["artist"])
+	except KeyError:
+		print("[warning] Couldn't read artist from easyID3 for " + file + " " + str(err))
+	
+		# Testing lead artist 
+		for entry in audio.getall("TPE1"):
+			artist += ' '.join(entry.text)
+		
+		# Testing band / orchestra
+		for entry in audio.getall("TPE2"):
+			artist += ' '.join(entry.text)
+		
+		if len(re.sub("\s*",'',artist))==0:
+			print "[Warning] Artist name was not found for " + file + ". Lyrics may be wrong."
+	
+	return artist
+	
+#Set lyrics
+def set_lyrics(audio, lyrics):
+	audio.delall("USLT")
+	audio[u"USLT::'eng'"] = id3.USLT()
+	audio[u"USLT::'eng'"].text = lyrics
+	audio[u"USLT::'eng'"].encoding = 0
+	audio[u"USLT::'eng'"].lang = 'eng'
+	audio[u"USLT::'eng'"].desc = u''
+		
+	audio.save(v2=3)
 
 try:
 	root = sys.argv[1];
@@ -145,19 +259,7 @@ while not final:
 				
 				#fetch missing songs only or show missing lyrics
 				if opt == 1 or opt == 2:
-					missing = False
-					
-					if len(audio.getall("USLT")) == 0:
-							missing = True
-					else:
-						full_text = ""
-
-						for uslt in audio.getall("USLT"):
-							if uslt.desc != u"None":
-								full_text +=  uslt.text
-							
-						if len(full_text) < MIN_LEN:
-							missing = True
+					missing = missing_lyrics(audio)
 							
 					if missing:
 						#fetch missing song
@@ -172,98 +274,13 @@ while not final:
 					fetch = True
 				
 				if fetch:
-					# Get title
-					title = ''
-				
-					try:
-						title = ' '.join(easy_audio["title"])
-					except Exception as err:
-						print("[warning] Couldn't read easyID3 for " + file + " " + str(err))
-						
-						for entry in audio.getall("TIT2"):
-							title += ' '.join(entry.text)
+					title = get_title(easy_audio, audio, file)
+					artist = get_artist(easy_audio, audio, file)
+					lyrics = fetch_lyrics(artist, title, filename)
 					
-					if len(re.sub("\s*",'',title)) == 0:
-						print("[warning] Title not found in ID3 tags for " + file + ". Using file name.")
-						title = filename
-					
-					# Get artist
-					artist = ''
-					
-					try: 
-						artist = ' '.join(easy_audio["artist"])
-					except KeyError:
-						print("[warning] Couldn't read artist from easyID3 for " + file + " " + str(err))
-					
-						# Testing lead artist 
-						for entry in audio.getall("TPE1"):
-							artist += ' '.join(entry.text)
-						
-						# Testing band / orchestra
-						for entry in audio.getall("TPE2"):
-							artist += ' '.join(entry.text)
-						
-						if len(re.sub("\s*",'',artist))==0:
-							print "[Warning] Artist name was not found for " + title + ". Lyrics may be wrong."
-					
-					artist_store = artist
-					
-					attempts = 0
-					
-					current_request = artist + ' ' + title
-					new_request = current_request
-					
-					print("\nFetching lyrics for " + current_request + ". Please wait.")
-					lyrics = get_lyrics(current_request)
-					
-					#Fault tolerance 
-					while attempts < MAX_ATTEMPTS:
-						if lyrics and len(lyrics)>0:
-							print "\n" + title + " : \n" + lyrics[:len(lyrics)/5] + "...(continued) "
-							break
-						else:
-							message = "[retry unsuccessful] Lyrics not found. "
-							
-							if attempts == 0:
-								message +=  "Cleaning leading numbers in title and retrying"
-								title = re.sub("^([(]?\d+[)]?\s*[.]?\s*[-_]?\s*)?\s*","", title)
-							elif attempts == 1:
-								message += "Trying without artist name"
-								artist = ''
-							elif attempts == 2:
-								message += "Cleaning all numbers from the title and retrying"
-								title = re.sub("\d+",'',title)
-							elif attempts == 3:
-								message += "Cleaning trailing braced words and retrying"
-								title = re.sub("\s*\((.\s*)*\)\s*$", '', title)
-							elif attempts == 4:
-								message += "Using file name instead of ID3 tag as title"
-								title = filename
-								#must try all over again with this new approach, restoring artist name
-								attempt = -1
-								artist = artist_store
-							print message
-							
-						new_request = artist + ' ' + title
-
-						# dont waste bandwidth on false guesses
-						if new_request != current_request:
-								current_request = new_request
-								print("[retry] Fetching lyrics for " + current_request + ". Please wait.")
-								lyrics = get_lyrics(current_request)
-								
-						attempts += 1
-						
 					try:
 						if lyrics and len(lyrics)>0 and final:
-							audio.delall("USLT")
-							audio[u"USLT::'eng'"] = id3.USLT()
-							audio[u"USLT::'eng'"].text = lyrics
-							audio[u"USLT::'eng'"].encoding = 0
-							audio[u"USLT::'eng'"].lang = 'eng'
-							audio[u"USLT::'eng'"].desc = u''
-							
-							audio.save(v2=3)
+							set_lyrics(audio, lyrics)
 							print "********Successfully added lyrics for " + title + "*************"
 							
 					except Exception as err:
